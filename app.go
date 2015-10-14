@@ -82,6 +82,104 @@ func NewApp() *App {
 }
 
 // Entry point to the cli app. Parses the arguments slice and routes to the proper flag/args combination
+func (a *App) RunInside(arguments []string) (err error) {
+	if a.Author != "" || a.Email != "" {
+		a.Authors = append(a.Authors, Author{Name: a.Author, Email: a.Email})
+	}
+
+	newCmds := []Command{}
+	for _, c := range a.Commands {
+		if c.HelpName == "" {
+			c.HelpName = fmt.Sprintf("%s %s", a.HelpName, c.Name)
+		}
+		newCmds = append(newCmds, c)
+	}
+	a.Commands = newCmds
+
+	// append help to commands
+	if a.Command(helpCommand.Name) == nil && !a.HideHelp {
+		//modify for run inside read like context,it is wired to show app usage with command name and so
+		a.Commands = append(a.Commands, insideHelpCommand)
+		if (HelpFlag != BoolFlag{}) {
+			a.appendFlag(HelpFlag)
+		}
+	}
+
+	//append version/help flags
+	if a.EnableBashCompletion {
+		a.appendFlag(BashCompletionFlag)
+	}
+
+	if !a.HideVersion {
+		a.appendFlag(VersionFlag)
+	}
+
+	// parse flags
+	set := flagSet(a.Name, a.Flags)
+	set.SetOutput(ioutil.Discard)
+	err = set.Parse(arguments[1:])
+	nerr := normalizeFlags(a.Flags, set)
+	if nerr != nil {
+		fmt.Fprintln(a.Writer, nerr)
+		context := NewContext(a, set, nil)
+		ShowAppHelp(context)
+		return nerr
+	}
+	context := NewContext(a, set, nil)
+
+	if err != nil {
+		fmt.Fprintln(a.Writer, "Incorrect Usage.")
+		fmt.Fprintln(a.Writer)
+		ShowAppHelp(context)
+		return err
+	}
+
+	if checkCompletions(context) {
+		return nil
+	}
+
+	if !a.HideHelp && checkHelp(context) {
+		return nil
+	}
+
+	if !a.HideVersion && checkVersion(context) {
+		return nil
+	}
+
+	if a.After != nil {
+		defer func() {
+			afterErr := a.After(context)
+			if afterErr != nil {
+				if err != nil {
+					err = NewMultiError(err, afterErr)
+				} else {
+					err = afterErr
+				}
+			}
+		}()
+	}
+
+	if a.Before != nil {
+		err := a.Before(context)
+		if err != nil {
+			return err
+		}
+	}
+
+	args := context.Args()
+	if args.Present() {
+		name := args.First()
+		c := a.Command(name)
+		if c != nil {
+			return c.Run(context)
+		}
+	}
+
+	// Run default Action
+	a.Action(context)
+	return nil
+}
+
 func (a *App) Run(arguments []string) (err error) {
 	if a.Author != "" || a.Email != "" {
 		a.Authors = append(a.Authors, Author{Name: a.Author, Email: a.Email})
@@ -178,7 +276,6 @@ func (a *App) Run(arguments []string) (err error) {
 	a.Action(context)
 	return nil
 }
-
 // Another entry point to the cli app, takes care of passing arguments and error handling
 func (a *App) RunAndExitOnError() {
 	if err := a.Run(os.Args); err != nil {

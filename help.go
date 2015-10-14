@@ -33,7 +33,28 @@ COPYRIGHT:
    {{.Copyright}}
    {{end}}
 `
+var listCmdHelpTemplate = `NAME:
+	{{.Usage}}
 
+USAGE:
+   {{if .Flags}}[global options]{{end}}{{if .Commands}} command [command options]{{end}} {{if .ArgsUsage}}{{.ArgsUsage}}{{else}}[arguments...]{{end}}
+   {{if .Version}}
+VERSION:
+   {{.Version}}
+   {{end}}{{if len .Authors}}
+AUTHOR(S):
+   {{range .Authors}}{{ . }}{{end}}
+   {{end}}{{if .Commands}}
+COMMANDS:
+   {{range .Commands}}{{join .Names ", "}}{{ "\t" }}{{.Usage}}
+   {{end}}{{end}}{{if .Flags}}
+GLOBAL OPTIONS:
+   {{range .Flags}}{{.}}
+   {{end}}{{end}}{{if .Copyright }}
+COPYRIGHT:
+   {{.Copyright}}
+   {{end}}
+`
 // The text template for the command help topic.
 // cli.go uses text/template to render templates. You can
 // render custom help text by setting this variable.
@@ -82,7 +103,20 @@ var helpCommand = Command{
 		}
 	},
 }
-
+var insideHelpCommand = Command{
+	Name:      "help",
+	Aliases:   []string{"h"},
+	Usage:     "Shows a list of commands or help for one command",
+	ArgsUsage: "[command]",
+	Action: func(c *Context) {
+		args := c.Args()
+		if args.Present() {
+			ShowCommandHelp(c, args.First())
+		} else {
+			ShowInsideAppHelp(c)
+		}
+	},
+}
 var helpSubcommand = Command{
 	Name:      "help",
 	Aliases:   []string{"h"},
@@ -109,7 +143,9 @@ var VersionPrinter = printVersion
 func ShowAppHelp(c *Context) {
 	HelpPrinter(c.App.Writer, AppHelpTemplate, c.App)
 }
-
+func ShowInsideAppHelp(c *Context) {
+	HelpPrinter(c.App.Writer, listCmdHelpTemplate, c.App)
+}
 // Prints the list of subcommands as the default app completion method
 func DefaultAppComplete(c *Context) {
 	for _, command := range c.App.Commands {
