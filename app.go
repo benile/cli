@@ -55,6 +55,7 @@ type App struct {
 	Email string
 	// Writer writer to write output to
 	Writer io.Writer
+	BuildinApp bool
 }
 
 // Tries to find out when this binary was compiled.
@@ -104,15 +105,18 @@ func (a *App) RunInside(arguments []string) (err error) {
 			a.appendFlag(HelpFlag)
 		}
 	}
-
+	if a.Command("version")==nil&& !a.HideVersion{
+		versionCmd:=Command{Name:"version",Usage:"show version",Action:func(c* Context) {
+			printVersion(c)
+		}}
+		a.Commands=append(a.Commands,versionCmd)
+	}
 	//append version/help flags
 	if a.EnableBashCompletion {
 		a.appendFlag(BashCompletionFlag)
 	}
 
-	if !a.HideVersion {
-		a.appendFlag(VersionFlag)
-	}
+
 
 	// parse flags
 	set := flagSet(a.Name, a.Flags)

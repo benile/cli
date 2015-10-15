@@ -71,6 +71,18 @@ OPTIONS:
    {{range .Flags}}{{.}}
    {{end}}{{ end }}
 `
+var insideCommandHelpTemplate = `NAME:
+   {{.Name}} - {{.Usage}}
+USAGE:
+   {{.Name}}{{if .Flags}} [command options]{{end}} {{if .ArgsUsage}}{{.ArgsUsage}}{{else}}[arguments...]{{end}}{{if .Description}}
+
+DESCRIPTION:
+   {{.Description}}{{end}}{{if .Flags}}
+
+OPTIONS:
+   {{range .Flags}}{{.}}
+   {{end}}{{ end }}
+`
 
 // The text template for the subcommand help topic.
 // cli.go uses text/template to render templates. You can
@@ -111,7 +123,7 @@ var insideHelpCommand = Command{
 	Action: func(c *Context) {
 		args := c.Args()
 		if args.Present() {
-			ShowCommandHelp(c, args.First())
+			ShowInsideCommandHelp(c, args.First())
 		} else {
 			ShowInsideAppHelp(c)
 		}
@@ -157,15 +169,38 @@ func DefaultAppComplete(c *Context) {
 
 // Prints help for the given command
 func ShowCommandHelp(ctx *Context, command string) {
+	if ctx.App.BuildinApp==true{
+		ShowInsideCommandHelp(ctx,command)
+	}else {
+		// show the subcommand help for a command with subcommands
+		if command == "" {
+			HelpPrinter(ctx.App.Writer, SubcommandHelpTemplate, ctx.App)
+			return
+		}
+
+		for _, c := range ctx.App.Commands {
+			if c.HasName(command) {
+				HelpPrinter(ctx.App.Writer, CommandHelpTemplate, c)
+				return
+			}
+		}
+
+		if ctx.App.CommandNotFound != nil {
+			ctx.App.CommandNotFound(ctx, command)
+		} else {
+			fmt.Fprintf(ctx.App.Writer, "No help topic for '%v'\n", command)
+		}
+	}
+}
+func ShowInsideCommandHelp(ctx *Context, command string) {
 	// show the subcommand help for a command with subcommands
 	if command == "" {
 		HelpPrinter(ctx.App.Writer, SubcommandHelpTemplate, ctx.App)
 		return
 	}
-
 	for _, c := range ctx.App.Commands {
 		if c.HasName(command) {
-			HelpPrinter(ctx.App.Writer, CommandHelpTemplate, c)
+			HelpPrinter(ctx.App.Writer, insideCommandHelpTemplate, c)
 			return
 		}
 	}
@@ -176,7 +211,6 @@ func ShowCommandHelp(ctx *Context, command string) {
 		fmt.Fprintf(ctx.App.Writer, "No help topic for '%v'\n", command)
 	}
 }
-
 // Prints help for the given subcommand
 func ShowSubcommandHelp(c *Context) {
 	ShowCommandHelp(c, c.Command.Name)
